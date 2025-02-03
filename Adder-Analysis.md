@@ -39,3 +39,6 @@ Process seems to be as such:
 * still not exactly sure about the LOD hardware but probably quite expensive (relatively speaking)
 
 * going to need to truncate the mantissa for the Error detection, but how are we going to control this if the regime could theoretically take up the whole posit?
+
+* need to spend more time with rounding, rounding bits, and the quire. There doesn't seem to be a quire implemented in this hardware (not that I'm exactly sure I can explain what a quire is)
+    * fixed point accumulation register that can hold the result of biggest possible computation? 
