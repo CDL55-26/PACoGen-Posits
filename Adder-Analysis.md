@@ -19,6 +19,7 @@ Process seems to be as such:
     * here, the hardware is using the k val and exponent val as unsigned integers and concatenating them: i.e. k=2, e=1 -> '10 + 01' -> '1001' 
 
     * Both the k and e bits are hardware determined, e width will be es and k width will be log2(N), where N is the posit size. This is to make sure there are enough bits to accomodate max regime size
+    * 
 
 * Process is done for both posits and then the comparison values are subtracted to figure out wich posit needs to be right shifted
 
