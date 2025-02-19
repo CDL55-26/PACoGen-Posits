@@ -14,9 +14,9 @@ function [31:0] log2; //custom log func to cal Bs
 endfunction
 
 // Parameters
-parameter N = 8; //parameter means constants that don't change during sim
+parameter N = 16; //parameter means constants that don't change during sim
 parameter Bs = log2(N);
-parameter es = 2;
+parameter es = 1;
 
 // Inputs to DUT
 reg [N-1:0] in1, in2; //reg indicates storage elements. Like a variable?
@@ -49,8 +49,8 @@ initial begin
     start = 0;
 
     // === Static Posit Inputs ===
-    in1 = 8'b01011010;  // First Posit number (modify as needed)
-    in2 = 8'b01010000;  // Second Posit number (modify as needed)
+    in1 = 16'b0110101000000000;  // First Posit number (modify as needed)
+    in2 = 16'b0110101000000000;  // Second Posit number (modify as needed)
 
     // Wait for global reset
     #100;
