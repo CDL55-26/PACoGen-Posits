@@ -27,6 +27,7 @@ To simplify tracking, we decided to **modify the `posit32` struct itself**, embe
   - Count additions.
   - Convert the result to `posit16` and back to `posit32`.
   - Compare the integer values to classify the representation into predefined error buckets.
+- Currently running with integers. Need to update code to support doubles, not enough range for ints 
 
 This change eliminated the need for `TrackedPosit32`, resolving all previous **type mismatches and function argument conflicts** while ensuring all additions were tracked **transparently within the benchmark**.
 
@@ -48,6 +49,8 @@ After successfully integrating tracking into the LU benchmark, we printed a **su
 - **Pie chart** displaying the percentage distribution of errors.
 
 To improve clarity, we moved **category labels from the pie chart to a color-coded legend**.
+
+Running the benchmark test with 100 iterations takes about 17 minutes. I tried running the 5000 iterations overnight and only got about 3500 iterations done in about 8 hours.
 
 ## Conclusion and Next Steps
 By directly modifying the `posit32` struct, we streamlined **error tracking, avoided dependency issues, and ensured accurate classification**. Future improvements could include:
