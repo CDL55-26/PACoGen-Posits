@@ -33,8 +33,17 @@ def P32_add(uiA, uiB):
     Add two 32-bit posit magnitudes. The code follows the C version from the
     SoftPosit library. The posit fields (sign, regime, exponent, fraction)
     are extracted and combined to produce the sum.
+    
+    This updated version checks if one of the inputs is zero; if so, the other 
+    posit is returned immediately.
     """
-    # local variables initialization:
+    # Special-case check: if one input is zero, return the other.
+    if uiA == 0:
+        return uiB & 0xFFFFFFFF
+    if uiB == 0:
+        return uiA & 0xFFFFFFFF
+
+    # Local variables initialization
     kA = 0
     rcarry = False
     bitNPlusOne = False
@@ -166,13 +175,14 @@ def P32_add(uiA, uiB):
 
     return result
 
+
 # -----------------------------------------------------------------------------
 # Example usage:
 if __name__ == '__main__':
     # You can test with example 32-bit patterns.
     # (Here we simply add two arbitrary 32-bit unsigned integers interpreted as posits.)
     a = 0b01000000000000000000000000000000  # an example posit value
-    b = 0b01001000000000000000000000000000  # another example posit value
+    b = 0b00000000000000000000000000000000  # another example posit value
 
     result = P32_add(a, b)
     print("Result posit (hex): 0x{:08X}".format(result))

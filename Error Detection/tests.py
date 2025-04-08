@@ -8,7 +8,6 @@ def test_conversions(val):
     
     print(f"Original float: {val} Int Posit: 0x{intermediate_posit:08X} Converted Float: {converted_double}")
 
-    
 
 def test_add_conversions(val1,val2):
     intermediate_posit1 = convertDoubleToP32(val1)
@@ -18,13 +17,11 @@ def test_add_conversions(val1,val2):
     
     converted_sum = convertP32ToDouble(P32_sum)
     
-    print(f"Original floats: {val1}, {val2} Converted Sum: {converted_sum}")
+    #print(f"Original floats: {val1}, {val2} Converted Sum: {converted_sum}")
     return converted_sum
-    
-    
 
 def test_adds():
-    test_vals = [x for x in range(10)]
+    test_vals = [-x for x in range(0,10)]
     
     for i in test_vals:
         for j in test_vals:
@@ -35,5 +32,6 @@ def test_adds():
                 print("PASS")
             else:
                 print(f"FAIL... Val1: {i} Val2: {j} Conv Sum: {converted_val} True Sum: {true_val}")
-    
-test_add_conversions(1,1)
+
+
+test_adds()

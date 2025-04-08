@@ -94,6 +94,6 @@ def convertP32ToDouble(pA):
 if __name__ == '__main__':
     # Example posit value (as a 32-bit unsigned integer).
     # You can change these values to test different posit numbers.
-    posit_val = 0b1001100000000000000000000000000  # Example posit value
+    posit_val = 0b00000000000000000000000000000000  # Example posit value
     converted = convertP32ToDouble(posit_val)
     print("Converted to double:", converted)
