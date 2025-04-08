@@ -28,14 +28,37 @@ def packToP32UI(regime, exp, frac):
     return (regime | exp | frac) & 0xFFFFFFFF
 
 # The main function translated from the C code:
-def P32_add(uiA, uiB):
+# Helper functions:
+
+def to_signed32(x):
+    """Convert a 32-bit unsigned int to a signed int."""
+    if x & 0x80000000:
+        return x - 0x100000000
+    return x
+
+def signP32UI(ui):
+    """Return True if the sign bit (bit 31) is set."""
+    return (ui & 0x80000000) != 0
+
+def signregP32UI(ui):
     """
-    Add two 32-bit posit magnitudes. The code follows the C version from the
-    SoftPosit library. The posit fields (sign, regime, exponent, fraction)
-    are extracted and combined to produce the sum.
-    
-    This updated version checks if one of the inputs is zero; if so, the other 
-    posit is returned immediately.
+    In the posit format the regime sign is encoded in the bit
+    after the sign bit.  This returns True if that bit is 1.
+    """
+    return (ui & 0x40000000) != 0
+
+def packToP32UI(regime, exp, frac):
+    """
+    Combine the regime, exponent, and fraction fields into a 32-bit posit.
+    In the SoftPosit package these fields are already shifted into the appropriate positions.
+    """
+    return (regime | exp | frac) & 0xFFFFFFFF
+
+# --- Internal 32-bit addition routine
+def _P32_add_internal(uiA, uiB):
+    """
+    Internal routine to add two 32-bit posit values (in their full 32-bit internal representation).
+    This function is essentially your original P32_add code (with the zero-check already included).
     """
     # Special-case check: if one input is zero, return the other.
     if uiA == 0:
@@ -45,7 +68,6 @@ def P32_add(uiA, uiB):
 
     # Local variables initialization
     kA = 0
-    rcarry = False
     bitNPlusOne = False
     bitsMore = False
 
@@ -80,8 +102,11 @@ def P32_add(uiA, uiB):
             tmp = (tmp << 1) & 0xFFFFFFFF
         tmp &= 0x7FFFFFFF
 
+    # For es=2, exponent is in the next 2 bits.
+    # (This code assumes es=2; if you change es, you may adapt the following constants.)
     expA = tmp >> 29  # extract 2-bit exponent
-    # Build frac64A: (0x40000000 OR (tmp<<1)), mask to 31 bits, then shift left 32 bits.
+
+    # Build frac64A: insert the hidden bit (0x40000000) and shift left 32 bits.
     frac64A = (((0x40000000 | ((tmp << 1) & 0xFFFFFFFF)) & 0x7FFFFFFF) << 32)
     shiftRight = kA
 
@@ -114,13 +139,12 @@ def P32_add(uiA, uiB):
 
     # -------------------------------------------------------------------
     # Normalization: check if we have a carry-out from frac64A.
-    rcarry = (frac64A & 0x8000000000000000) != 0
-    if rcarry:
+    if (frac64A & 0x8000000000000000) != 0:
         expA += 1
         if expA > 3:
             kA += 1
             expA &= 0x3
-        frac64A //= 2  # same as shifting right by 1
+        frac64A //= 2  # equivalent to shifting right by 1
 
     # -------------------------------------------------------------------
     # Recompute regime and prepare to pack.
@@ -161,11 +185,10 @@ def P32_add(uiA, uiB):
         # Pack the fields back into a 32-bit posit.
         result = packToP32UI(regime, expA, fracA)
 
-        # Round if necessary.
+        # Apply round-to-even if needed.
         if bitNPlusOne:
             if (frac64A & 0x7FFFFFFF) != 0:
                 bitsMore = True
-            # Add rounding increment: round to even.
             result = (result + ((result & 1) | (1 if bitsMore else 0))) & 0xFFFFFFFF
 
     # -------------------------------------------------------------------
@@ -175,16 +198,55 @@ def P32_add(uiA, uiB):
 
     return result
 
+# --- Public addition routine
+def posit_add(uiA, uiB, nbits=32, es=2):
+    """
+    Add two posits of a given bit-width (nbits) and exponent size (es).
+    
+    This function first “expands” the nbit inputs to 32 bits, calls the internal
+    addition routine, then compresses the 32-bit result back to nbits.
+    
+    Parameters:
+        uiA, uiB (int): The input posit values (stored in nbits).
+        nbits       (int): The total number of bits for the posit.
+        es          (int): The exponent field width.  (Currently the internal addition
+                           routine is tailored for es=2, so if you change es you might
+                           need to adjust the constant shifts in _P32_add_internal.)
+    
+    Returns:
+        int: The resulting posit, stored in nbits.
+    """
+    mask = (1 << nbits) - 1
+    delta = 32 - nbits
+
+    # Expand each n-bit posit into a 32-bit word.
+    uiA_exp = (uiA & mask) << delta
+    uiB_exp = (uiB & mask) << delta
+
+    # Call the internal addition algorithm.
+    result32 = _P32_add_internal(uiA_exp, uiB_exp)
+
+    # Compress the 32-bit result back to nbits.
+    result = (result32 >> delta) & mask
+    return result
 
 # -----------------------------------------------------------------------------
 # Example usage:
 if __name__ == '__main__':
-    # You can test with example 32-bit patterns.
-    # (Here we simply add two arbitrary 32-bit unsigned integers interpreted as posits.)
-    a = 0b01000000000000000000000000000000  # an example posit value
-    b = 0b00000000000000000000000000000000  # another example posit value
-
-    result = P32_add(a, b)
-    print("Result posit (hex): 0x{:08X}".format(result))
-    print("Result posit (bin): 0b{:32b}".format(result))
+    # Example: for 32-bit posits (es=2)
+    a32 = 0b01000000000000000000000000000000  # Example 32-bit posit
+    b32 = 0b00000000000000000000000000000000  # Zero
     
+    result32 = posit_add(a32, b32, nbits=32, es=2)
+    print("32-bit posit addition:")
+    print("Result (hex): 0x{:08X}".format(result32))
+    print("Result (bin): 0b{:032b}".format(result32))
+    
+    # Example: for 16-bit posits (es could be 1, as in your other conversion)
+    a16 = 0b0101010101010101  # Example 16-bit pattern
+    b16 = 0b0000000000000000  # Zero for testing
+
+    result16 = posit_add(a16, b16, nbits=16, es=1)
+    print("\n16-bit posit addition (es=1):")
+    print("Result (hex): 0x{:04X}".format(result16))
+    print("Result (bin): 0b{:016b}".format(result16))
