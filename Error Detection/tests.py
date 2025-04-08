@@ -16,7 +16,7 @@ def test_add_conversions(val1,val2, nbits, es):
     
     converted_sum = positToDouble(P32_sum,nbits,es)
     
-    #print(f"Original floats: {val1}, {val2} Converted Sum: {converted_sum}")
+    print(f"Original floats: {val1}, {val2} Converted Sum: {converted_sum}")
     return converted_sum
 
 def test_adds():
@@ -33,4 +33,6 @@ def test_adds():
                 print(f"FAIL... Val1: {i} Val2: {j} Conv Sum: {converted_val} True Sum: {true_val}")
 
 
-test_adds()
+#test_add_conversions(-131,-65369,16,2)
+val = -131
+print(f"Posit rep of {val} = {doubleToPosit(val):032b}")
