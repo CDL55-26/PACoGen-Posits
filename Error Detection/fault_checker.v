@@ -4,29 +4,29 @@ module fault_checker #(
   parameter FULL_NBITS  = 32,
   parameter TRUNC_NBITS = 16,
   parameter ES          = 2,
-  parameter FRAC_SIZE   = 3
+  parameter FRAC_SIZE   = 3 //min number of bits left for frac
 )(
-  input  [FULL_NBITS-1:0] A,
+  input  [FULL_NBITS-1:0] A, //variable input size, rest of script not variable
   input  [FULL_NBITS-1:0] B,
-  output reg              fault,
-  output reg              mode,
-  output reg [FULL_NBITS-1:0] true_sum,
-  output reg [FULL_NBITS-1:0] used_sum,
-  output reg [6:0]        true_scale,
-  output reg [6:0]        used_scale
+  output reg              fault, //should trigger only if scale differs too much 
+  output reg              mode, //using 32 or 16 bit adder for check
+  output reg [FULL_NBITS-1:0] true_sum, //actual true output
+  output reg [FULL_NBITS-1:0] used_sum, //sum of checker adder (could be the 16 or 32)
+  output reg [6:0]        true_scale, //scale of true val
+  output reg [6:0]        used_scale //scale of our checker sum
 );
 
-  function [FULL_NBITS-1:0] posit_abs_32;
+  function [FULL_NBITS-1:0] posit_abs_32; //gets abs value of the true, fullsize posit
     input [FULL_NBITS-1:0] P;
     begin
       if (P[FULL_NBITS-1] == 1'b1)
-        posit_abs_32 = (~P + 1) & {FULL_NBITS{1'b1}};
+        posit_abs_32 = (~P + 1) & {FULL_NBITS{1'b1}}; //2s comp, prevent overflow
       else
         posit_abs_32 = P;
     end
   endfunction
 
-  function [TRUNC_NBITS-1:0] posit_abs_16;
+  function [TRUNC_NBITS-1:0] posit_abs_16; //same as above, for the truncated size
     input [TRUNC_NBITS-1:0] P;
     begin
       if (P[TRUNC_NBITS-1] == 1'b1)
@@ -36,14 +36,14 @@ module fault_checker #(
     end
   endfunction
 
-  function [TRUNC_NBITS-1:0] trunc_posit;
+  function [TRUNC_NBITS-1:0] trunc_posit; //truncates full size posit
     input [FULL_NBITS-1:0] P;
     begin
       trunc_posit = P >> (FULL_NBITS - TRUNC_NBITS);
     end
   endfunction
 
-  function integer count_leading_zeros;
+  function integer count_leading_zeros;//function to count number of leading zeros, returns val in count_leading_zeros
     input [31:0] x;
     input integer width;
     integer i;
@@ -59,7 +59,7 @@ module fault_checker #(
     end
   endfunction
 
-  function [6:0] get_scale;
+  function [6:0] get_scale; //scale 7 bits long
     input [FULL_NBITS-1:0] P_in;
     input integer current_nbits;
     input integer full_nbits;
@@ -71,13 +71,16 @@ module fault_checker #(
     begin
       fixed_Bs = 0;
       temp = full_nbits - 1;
+      
       while (temp > 0) begin
         fixed_Bs = fixed_Bs + 1;
         temp = temp >> 1;
       end
+
       fixed_width = fixed_Bs + ES;
       mask = (1 << current_nbits) - 1;
       P = P_in & mask;
+      
       if (P == 0)
         get_scale = 0;
       else begin

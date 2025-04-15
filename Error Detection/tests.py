@@ -35,4 +35,7 @@ def test_adds():
 
 #test_add_conversions(-131,-65369,16,2)
 val = -131
-print(f"Posit rep of {val} = {doubleToPosit(val):032b}")
+#print(f"Posit rep of {val} = {doubleToPosit(val):032b}")
+
+posit = 0x4c000000
+print(f"Posit to double: {positToDouble(posit)}")

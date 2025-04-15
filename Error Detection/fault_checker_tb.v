@@ -49,15 +49,15 @@ module fault_checker_tb;
              A, B, true_sum, used_sum, true_scale, used_scale, fault, mode);
     
     // Test Case 2: Small positive values.
-    A = 32'h00000001;
-    B = 32'h00000002;
+    A = 32'h40000000;
+    B = 32'h40000000;
     #10;
     $display("Test 2: A=%h, B=%h, true_sum=%h, used_sum=%h, true_scale=%h, used_scale=%h, fault=%b, mode=%b",
              A, B, true_sum, used_sum, true_scale, used_scale, fault, mode);
     
     // Test Case 3: Values with high-order bits set (simulate negatives).
-    A = 32'hF0000001;
-    B = 32'hF0000002;
+    A = 32'h40000000;
+    B = 32'h48000000;
     #10;
     $display("Test 3: A=%h, B=%h, true_sum=%h, used_sum=%h, true_scale=%h, used_scale=%h, fault=%b, mode=%b",
              A, B, true_sum, used_sum, true_scale, used_scale, fault, mode);
