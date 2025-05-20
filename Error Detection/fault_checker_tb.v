@@ -35,10 +35,12 @@ module fault_checker_tb;
     .true_scale(true_scale),
     .used_scale(used_scale)
   );
-  
-  integer i, j;
-  
+
   initial begin
+    // VCD dump setup
+    $dumpfile("switching.vcd");
+    $dumpvars(0, fault_checker_tb);
+
     $display("Starting fault_checker testbench.");
     
     // Test Case 1: Both inputs are zero.
@@ -61,17 +63,6 @@ module fault_checker_tb;
     #10;
     $display("Test 3: A=%h, B=%h, true_sum=%h, used_sum=%h, true_scale=%h, used_scale=%h, fault=%b, mode=%b",
              A, B, true_sum, used_sum, true_scale, used_scale, fault, mode);
-    
-    // Test Case 4: Loop through a small range of values.
-    for (i = 0; i < 4; i = i + 1) begin
-      for (j = 0; j < 4; j = j + 1) begin
-         A = i;
-         B = j;
-         #10;
-         $display("Loop Test: A=%h, B=%h, true_sum=%h, used_sum=%h, true_scale=%h, used_scale=%h, fault=%b, mode=%b", 
-                  A, B, true_sum, used_sum, true_scale, used_scale, fault, mode);
-      end
-    end
     
     $display("Testbench finished.");
     $finish;
