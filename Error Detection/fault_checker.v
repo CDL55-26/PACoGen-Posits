@@ -52,7 +52,8 @@ module fault_checker #(
       for (i = width-1; i >= 0; i = i - 1) begin
         if (x[i] == 1'b1) begin
           i = -1;
-        end else begin
+        end 
+        else begin
           count_leading_zeros = count_leading_zeros + 1;
         end
       end
@@ -63,47 +64,45 @@ module fault_checker #(
     input [FULL_NBITS-1:0] P_in;
     input integer current_nbits;
     input integer full_nbits;
+    
     integer temp, fixed_Bs, fixed_width, k, regime;
+
     reg rc;
     reg [FULL_NBITS-1:0] mask, P, xin, xin_r, X, xin_tmp, low_part_shifted;
     reg [FULL_NBITS-3:0] low_part;
     reg [ES-1:0] exponent;
     begin
-      fixed_Bs = 0;
-      temp = full_nbits - 1;
-      
-      while (temp > 0) begin
-        fixed_Bs = fixed_Bs + 1;
-        temp = temp >> 1;
-      end
-
-      fixed_width = fixed_Bs + ES;
       mask = (1 << current_nbits) - 1;
       P = P_in & mask;
       
-      if (P == 0)
+      if (P == 0) //if P is zero, scale is zero
         get_scale = 0;
+      
       else begin
-        rc = P[current_nbits-2];
-        xin = P;
-        if (rc)
+        rc = P[current_nbits-2]; //start of regime
+        xin = P; //temp vector
+
+        if (rc) //if rc 1, invert regime
           xin_r = ~xin & mask;
         else
           xin_r = xin;
+        
         X = (((xin_r & ((1 << (current_nbits - 1)) - 1)) << 1) | rc);
-        k = count_leading_zeros(X, current_nbits);
+        k = count_leading_zeros(X, current_nbits); //calculate k from regime
         if (rc)
           regime = k - 1;
         else
           regime = k;
+        //check if any exponent/fraction to isolate
         if (current_nbits < 3)
           low_part = 0;
         else
           low_part = xin & ((1 << (current_nbits - 2)) - 1);
+        
         low_part_shifted = low_part << 2;
         xin_tmp = (low_part_shifted << k) & mask;
-        exponent = (xin_tmp >> (current_nbits - ES)) & ((1 << ES) - 1);
-        get_scale = (regime << ES) | exponent;
+        exponent = (xin_tmp >> (current_nbits - ES)) & ((1 << ES) - 1); //isolates exponent
+        get_scale = (regime << ES) | exponent; //scale is regime contribution + ES (unsigned)
       end
     end
   endfunction
