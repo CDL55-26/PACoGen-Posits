@@ -102,7 +102,7 @@ module fault_checker #(
         low_part_shifted = low_part << 2;
         xin_tmp = (low_part_shifted << k) & mask;
         exponent = (xin_tmp >> (current_nbits - ES)) & ((1 << ES) - 1); //isolates exponent
-        get_scale = (regime << ES) | exponent; //scale is regime contribution + ES (unsigned)
+        get_scale = (regime << ES) | exponent; //scale is regime contribution + ES (unsi)
       end
     end
   endfunction
