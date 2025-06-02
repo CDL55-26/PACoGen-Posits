@@ -26,3 +26,7 @@ print(positToDouble((0x66033334 )))
 
 print(positToDouble(0x6602,16,2))
 
+print(hex(doubleToPosit(6)))
+print(positToDouble((0x54000000)))
+
+

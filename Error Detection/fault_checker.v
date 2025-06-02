@@ -163,8 +163,8 @@ module fault_checker #(
   wire trunc_done, trunc_inf, trunc_zero;
 
   posit_add #(.N(FULL_NBITS)) full_adder (
-    .in1   (posit_abs_32(A)),
-    .in2   (posit_abs_32(B)),
+    .in1   (A),
+    .in2   (B),
     .start (1'b1),
     .out   (adder_full_out),
     .inf   (full_inf),
@@ -173,8 +173,8 @@ module fault_checker #(
   );
 
   posit_add #(.N(TRUNC_NBITS)) trunc_adder (
-    .in1   (posit_abs_16(trunc_posit(A))),
-    .in2   (posit_abs_16(trunc_posit(B))),
+    .in1   (trunc_posit(A)),
+    .in2   (trunc_posit(B)),
     .start (1'b1),
     .out   (adder_trunc_out),
     .inf   (trunc_inf),
@@ -192,11 +192,11 @@ module fault_checker #(
     end
 
     true_sum   = adder_full_out;
-    true_scale = get_scale(adder_full_out, FULL_NBITS, FULL_NBITS);
+    true_scale = get_scale(posit_abs_32(adder_full_out), FULL_NBITS, FULL_NBITS);
     if (mode)
-      used_scale = get_scale(used_sum, TRUNC_NBITS, FULL_NBITS);
+      used_scale = get_scale(posit_abs_16(adder_trunc_out), TRUNC_NBITS, FULL_NBITS);
     else
-      used_scale = get_scale(used_sum, FULL_NBITS, FULL_NBITS);
+      used_scale = get_scale(posit_abs_32(used_sum), FULL_NBITS, FULL_NBITS);
 
     if (true_scale > used_scale)
       fault = ((true_scale - used_scale) > 1);

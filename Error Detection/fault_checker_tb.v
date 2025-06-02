@@ -80,8 +80,9 @@ module fault_checker_tb;
 
       #10;  // wait 10 ns for DUT to process
 
-      $display("Line %0d: A=%h  B=%h  | true_sum=%h  used_sum=%h | fault=%b  mode=%b",
-         line_no, A, B, true_sum, used_sum[15:0], fault, mode);
+      $display("Line %0d: A=%h  B=%h  | true_sum=%h  used_sum=%h | true_scale=%b used_scale=%b | fault=%b  mode=%b",
+         line_no, A, B, true_sum, used_sum[15:0], true_scale, used_scale, fault, mode);
+
 
 
       line_no = line_no + 1;
