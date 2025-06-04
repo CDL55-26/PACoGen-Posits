@@ -16,6 +16,10 @@ module fault_checker #(
   output reg [6:0]        used_scale //scale of our checker sum
 );
 
+localparam MODE_PUNT32    = 2'b00;
+localparam MODE_TRUNC16   = 2'b01;
+localparam MODE_REVERSE16 = 2'b10;
+
   function [FULL_NBITS-1:0] full_nbits_abs; //gets abs value of the true, fullsize posit
     input [FULL_NBITS-1:0] P;
     begin
@@ -161,64 +165,139 @@ module fault_checker #(
     end
   endfunction
 
-  wire [FULL_NBITS-1:0]  adder_full_out, adder_punt_out;
-  wire [TRUNC_NBITS-1:0] adder_trunc_out;
-  wire full_done, full_inf, full_zero;
-  wire punt_done, punt_inf, punt_zero;
-  wire trunc_done, trunc_inf, trunc_zero;
+  localparam MODE_PUNT32    = 2'b00;
+localparam MODE_TRUNC16   = 2'b01;
+localparam MODE_REVERSE16 = 2'b10;
 
-  posit_add #(.N(FULL_NBITS)) full_adder (
-    .in1   (A),
-    .in2   (B),
-    .start (1'b1), //always activate full_adder
-    .out   (adder_full_out),
-    .inf   (full_inf),
-    .zero  (full_zero),
-    .done  (full_done)
-  );
+// Adder Outputs
+wire [FULL_NBITS-1:0]  adder_full_out, adder_punt_out;
+wire [TRUNC_NBITS-1:0] adder_trunc_out_wire;
+wire full_done, full_inf, full_zero;
+wire punt_done, punt_inf, punt_zero;
+wire trunc_done, trunc_inf, trunc_zero;
 
-  /*TODO adjust start parameter for punt_adder and trunc_adder */
-  posit_add #(.N(FULL_NBITS)) punt_adder (
-    .in1   (A),
-    .in2   (B),
-    .start (~mode), //use punt adder if mode is 0, meaning cant use truncated adder
-    .out   (adder_punt_out),
-    .inf   (punt_inf),
-    .zero  (punt_zero),
-    .done  (punt_done)
-  );
+// Adder Instances
+posit_add #(.N(FULL_NBITS)) full_adder (
+  .in1   (A),
+  .in2   (B),
+  .start (1'b1),
+  .out   (adder_full_out),
+  .inf   (full_inf),
+  .zero  (full_zero),
+  .done  (full_done)
+);
 
-  posit_add #(.N(TRUNC_NBITS)) trunc_adder (
-    .in1   (trunc_posit(A)),
-    .in2   (trunc_posit(B)),
-    .start (mode), //use trunc adder if mode 0
-    .out   (adder_trunc_out),
-    .inf   (trunc_inf),
-    .zero  (trunc_zero),
-    .done  (trunc_done)
-  );
+posit_add #(.N(FULL_NBITS)) punt_adder (
+  .in1   (A),
+  .in2   (B),
+  .start (~mode[1]),
+  .out   (adder_punt_out),
+  .inf   (punt_inf),
+  .zero  (punt_zero),
+  .done  (punt_done)
+);
 
-  always @(*) begin
-    if (posit_trunc_check(full_nbits_abs(A), full_nbits_abs(B), FULL_NBITS, ES, FRAC_SIZE)) begin
-      mode     = 1;
-      used_sum = { {(FULL_NBITS-TRUNC_NBITS){1'b0}}, adder_trunc_out };
-    end 
-    else begin
-      mode     = 0;
-      used_sum = adder_punt_out;
+reg [TRUNC_NBITS-1:0] trunc_adder_in1, trunc_adder_in2;
+reg                   trunc_adder_start;
+
+posit_add #(.N(TRUNC_NBITS)) trunc_adder (
+  .in1   (trunc_adder_in1),
+  .in2   (trunc_adder_in2),
+  .start (trunc_adder_start),
+  .out   (adder_trunc_out_wire),
+  .inf   (),
+  .zero  (),
+  .done  (trunc_done)
+);
+
+// Reverse Check FSM
+typedef enum logic [1:0] {IDLE, FWD, REV} st_t;
+st_t state = IDLE, next;
+
+reg  [TRUNC_NBITS-1:0] C_tr;
+reg                    rpc_fail;
+wire                   sign_diff = A[FULL_NBITS-1] ^ B[FULL_NBITS-1];
+
+// FSM Logic
+always @(*) begin
+  next = state;
+  trunc_adder_start = 1'b0;
+  rpc_fail = 1'b0;
+
+  case (state)
+    IDLE: if (mode == MODE_REVERSE16) begin
+      next = FWD;
+      trunc_adder_start = 1'b1;
     end
+    FWD: begin
+      C_tr = adder_trunc_out_wire;
+      next = REV;
+      trunc_adder_start = 1'b1;
+    end
+    REV: begin
+      rpc_fail = (adder_trunc_out_wire != trunc_posit(A));
+      next = IDLE;
+    end
+  endcase
+end
 
-    true_sum   = adder_full_out;
-    true_scale = get_scale(full_nbits_abs(adder_full_out), FULL_NBITS, FULL_NBITS);
-    if (mode)
-      used_scale = get_scale(trunc_nbits_abs(adder_trunc_out), TRUNC_NBITS, FULL_NBITS);
-    else
-      used_scale = get_scale(full_nbits_abs(used_sum), FULL_NBITS, FULL_NBITS);
+always @(posedge clk or negedge rst_n)
+  if (!rst_n) state <= IDLE;
+  else        state <= next;
 
-    if (true_scale > used_scale)
-      fault = ((true_scale - used_scale) > 1);
-    else
-      fault = ((used_scale - true_scale) > 1);
-  end
+// Mode Selection
+always @(*) begin
+  if (!posit_trunc_check(full_nbits_abs(A), full_nbits_abs(B), FULL_NBITS, ES, FRAC_SIZE))
+    mode = MODE_PUNT32;
+  else if (sign_diff)
+    mode = MODE_REVERSE16;
+  else
+    mode = MODE_TRUNC16;
+end
+
+// Truncated Adder Inputs
+always @(*) begin
+  case (state)
+    FWD: begin
+      trunc_adder_in1 = trunc_posit(A);
+      trunc_adder_in2 = trunc_posit(B);
+    end
+    REV: begin
+      trunc_adder_in1 = C_tr;
+      trunc_adder_in2 = trunc_posit(B);
+    end
+    default: begin
+      trunc_adder_in1 = 0;
+      trunc_adder_in2 = 0;
+    end
+  endcase
+end
+
+// Compute Results
+always @(*) begin
+  case (mode)
+    MODE_TRUNC16: begin
+      used_sum   = {{(FULL_NBITS-TRUNC_NBITS){1'b0}}, adder_trunc_out_wire};
+      used_scale = get_scale(trunc_nbits_abs(adder_trunc_out_wire), TRUNC_NBITS, FULL_NBITS);
+    end
+    MODE_REVERSE16: begin
+      used_sum   = {{(FULL_NBITS-TRUNC_NBITS){1'b0}}, adder_trunc_out_wire};
+      used_scale = get_scale(trunc_nbits_abs(adder_trunc_out_wire), TRUNC_NBITS, FULL_NBITS);
+    end
+    default: begin
+      used_sum   = adder_punt_out;
+      used_scale = get_scale(full_nbits_abs(adder_punt_out), FULL_NBITS, FULL_NBITS);
+    end
+  endcase
+
+  true_sum   = adder_full_out;
+  true_scale = get_scale(full_nbits_abs(adder_full_out), FULL_NBITS, FULL_NBITS);
+
+  wire big_scale_err = (true_scale > used_scale) ?
+                       ((true_scale - used_scale) > 1) :
+                       ((used_scale - true_scale) > 1);
+
+  fault = big_scale_err | (mode == MODE_REVERSE16 && rpc_fail);
+end
 
 endmodule
