@@ -170,7 +170,7 @@ module fault_checker #(
   posit_add #(.N(FULL_NBITS)) full_adder (
     .in1   (A),
     .in2   (B),
-    .start (1'b1),
+    .start (1'b1), //always activate full_adder
     .out   (adder_full_out),
     .inf   (full_inf),
     .zero  (full_zero),
@@ -181,7 +181,7 @@ module fault_checker #(
   posit_add #(.N(FULL_NBITS)) punt_adder (
     .in1   (A),
     .in2   (B),
-    .start (1'b1),
+    .start (~mode), //use punt adder if mode is 0, meaning cant use truncated adder
     .out   (adder_punt_out),
     .inf   (punt_inf),
     .zero  (punt_zero),
@@ -191,7 +191,7 @@ module fault_checker #(
   posit_add #(.N(TRUNC_NBITS)) trunc_adder (
     .in1   (trunc_posit(A)),
     .in2   (trunc_posit(B)),
-    .start (1'b1),
+    .start (mode), //use trunc adder if mode 0
     .out   (adder_trunc_out),
     .inf   (trunc_inf),
     .zero  (trunc_zero),
@@ -202,9 +202,10 @@ module fault_checker #(
     if (posit_trunc_check(full_nbits_abs(A), full_nbits_abs(B), FULL_NBITS, ES, FRAC_SIZE)) begin
       mode     = 1;
       used_sum = { {(FULL_NBITS-TRUNC_NBITS){1'b0}}, adder_trunc_out };
-    end else begin
+    end 
+    else begin
       mode     = 0;
-      used_sum = adder_full_out;
+      used_sum = adder_punt_out;
     end
 
     true_sum   = adder_full_out;
