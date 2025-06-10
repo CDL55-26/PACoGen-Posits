@@ -10,6 +10,7 @@ module fault_checker #(
   input  [FULL_NBITS-1:0] B,
   output reg              fault, //should trigger only if scale differs too much 
   output reg              mode, //using 32 or 16 bit adder for check
+  output reg              reverse_mode, //using reverse checking
   output reg [FULL_NBITS-1:0] true_sum, //actual true output
   output reg [FULL_NBITS-1:0] used_sum, //sum of checker adder (could be the 16 or 32)
   output reg [6:0]        true_scale, //scale of true val
@@ -161,11 +162,75 @@ module fault_checker #(
     end
   endfunction
 
+  // New function to detect catastrophic cancellation risk
+  function catastrophic_cancellation_risk;
+    input [FULL_NBITS-1:0] PA;
+    input [FULL_NBITS-1:0] PB;
+    input [FULL_NBITS-1:0] PC; // result
+    
+    reg sign_A, sign_B, sign_C;
+    reg [6:0] scale_A, scale_B, scale_C;
+    integer scale_diff_AB, scale_diff_result;
+    
+    begin
+      sign_A = PA[FULL_NBITS-1];
+      sign_B = PB[FULL_NBITS-1];
+      sign_C = PC[FULL_NBITS-1];
+      
+      // Get scales for comparison
+      scale_A = get_scale(full_nbits_abs(PA), FULL_NBITS, FULL_NBITS);
+      scale_B = get_scale(full_nbits_abs(PB), FULL_NBITS, FULL_NBITS);
+      scale_C = get_scale(full_nbits_abs(PC), FULL_NBITS, FULL_NBITS);
+      
+      // Check for opposite signs and similar magnitudes with small result
+      if (sign_A != sign_B) begin // opposite signs
+        // Calculate scale differences
+        scale_diff_AB = (scale_A > scale_B) ? (scale_A - scale_B) : (scale_B - scale_A);
+        
+        // If operands have similar scale (within 2) but result is much smaller, risk of cancellation
+        if (scale_diff_AB <= 2) begin
+          scale_diff_result = (scale_A > scale_C) ? (scale_A - scale_C) : (scale_A - scale_C);
+          if (scale_B > scale_C)
+            scale_diff_result = (scale_B - scale_C > scale_diff_result) ? (scale_B - scale_C) : scale_diff_result;
+          
+          // If result is significantly smaller than operands, we have cancellation
+          catastrophic_cancellation_risk = (scale_diff_result > 4);
+        end
+        else begin
+          catastrophic_cancellation_risk = 0;
+        end
+      end
+      else begin
+        catastrophic_cancellation_risk = 0;
+      end
+    end
+  endfunction
+
   wire [FULL_NBITS-1:0]  adder_full_out, adder_punt_out;
-  wire [TRUNC_NBITS-1:0] adder_trunc_out;
+  wire [TRUNC_NBITS-1:0] adder_trunc_out, adder_trunc_reverse_out;
   wire full_done, full_inf, full_zero;
   wire punt_done, punt_inf, punt_zero;
   wire trunc_done, trunc_inf, trunc_zero;
+  wire trunc_reverse_done, trunc_reverse_inf, trunc_reverse_zero;
+
+  // Signals for reverse checking
+  wire [TRUNC_NBITS-1:0] trunc_C, trunc_A, trunc_B;
+  wire [TRUNC_NBITS-1:0] reverse_operand_A, reverse_operand_B;
+  wire [TRUNC_NBITS-1:0] reverse_operand_B_negated;
+  wire reverse_subtract;
+  
+  assign trunc_C = trunc_posit(adder_full_out);
+  assign trunc_A = trunc_posit(A);
+  assign trunc_B = trunc_posit(B);
+  
+  // For reverse checking: compute C - A to check B, or C - B to check A
+  // We'll check the operand with smaller magnitude for better numerical stability
+  assign reverse_subtract = 1'b1; // Always subtract for reverse checking
+  assign reverse_operand_A = trunc_C;
+  assign reverse_operand_B = (full_nbits_abs(A) <= full_nbits_abs(B)) ? trunc_A : trunc_B;
+  
+  // Properly size the two's complement operation
+  assign reverse_operand_B_negated = (~reverse_operand_B + 1'b1) & {TRUNC_NBITS{1'b1}};
 
   posit_add #(.N(FULL_NBITS)) full_adder (
     .in1   (A),
@@ -177,7 +242,6 @@ module fault_checker #(
     .done  (full_done)
   );
 
-  /*TODO adjust start parameter for punt_adder and trunc_adder */
   posit_add #(.N(FULL_NBITS)) punt_adder (
     .in1   (A),
     .in2   (B),
@@ -191,34 +255,92 @@ module fault_checker #(
   posit_add #(.N(TRUNC_NBITS)) trunc_adder (
     .in1   (trunc_posit(A)),
     .in2   (trunc_posit(B)),
-    .start (mode), //use trunc adder if mode 0
+    .start (mode & ~reverse_mode), //use trunc adder if mode 1 and not reverse mode
     .out   (adder_trunc_out),
     .inf   (trunc_inf),
     .zero  (trunc_zero),
     .done  (trunc_done)
   );
 
+  // New adder for reverse checking
+  posit_add #(.N(TRUNC_NBITS)) trunc_reverse_adder (
+    .in1   (reverse_operand_A),
+    .in2   (reverse_subtract ? reverse_operand_B_negated : reverse_operand_B), // subtract for reverse
+    .start (mode & reverse_mode), //use reverse adder if mode 1 and reverse mode
+    .out   (adder_trunc_reverse_out),
+    .inf   (trunc_reverse_inf),
+    .zero  (trunc_reverse_zero),
+    .done  (trunc_reverse_done)
+  );
+
+  // Declare variables used in always block at module level
+  reg [6:0] expected_scale_reg;
+
   always @(*) begin
+    // First check if truncation is feasible
     if (posit_trunc_check(full_nbits_abs(A), full_nbits_abs(B), FULL_NBITS, ES, FRAC_SIZE)) begin
-      mode     = 1;
-      used_sum = { {(FULL_NBITS-TRUNC_NBITS){1'b0}}, adder_trunc_out };
+      mode = 1;
+      
+      // Check if we need reverse checking due to catastrophic cancellation risk
+      if (catastrophic_cancellation_risk(A, B, adder_full_out)) begin
+        reverse_mode = 1;
+        used_sum = { {(FULL_NBITS-TRUNC_NBITS){1'b0}}, adder_trunc_reverse_out };
+        
+        // For reverse checking, we compare the reverse result with the expected operand
+        if (full_nbits_abs(A) <= full_nbits_abs(B)) begin
+          // We computed C - A, compare with B
+          used_scale = get_scale(trunc_nbits_abs(adder_trunc_reverse_out), TRUNC_NBITS, FULL_NBITS);
+        end
+        else begin
+          // We computed C - B, compare with A  
+          used_scale = get_scale(trunc_nbits_abs(adder_trunc_reverse_out), TRUNC_NBITS, FULL_NBITS);
+        end
+      end
+      else begin
+        reverse_mode = 0;
+        used_sum = { {(FULL_NBITS-TRUNC_NBITS){1'b0}}, adder_trunc_out };
+        used_scale = get_scale(trunc_nbits_abs(adder_trunc_out), TRUNC_NBITS, FULL_NBITS);
+      end
     end 
     else begin
-      mode     = 0;
+      mode = 0;
+      reverse_mode = 0;
       used_sum = adder_punt_out;
+      used_scale = get_scale(full_nbits_abs(used_sum), FULL_NBITS, FULL_NBITS);
     end
 
-    true_sum   = adder_full_out;
+    true_sum = adder_full_out;
     true_scale = get_scale(full_nbits_abs(adder_full_out), FULL_NBITS, FULL_NBITS);
-    if (mode)
-      used_scale = get_scale(trunc_nbits_abs(adder_trunc_out), TRUNC_NBITS, FULL_NBITS);
-    else
-      used_scale = get_scale(full_nbits_abs(used_sum), FULL_NBITS, FULL_NBITS);
 
-    if (true_scale > used_scale)
-      fault = ((true_scale - used_scale) > 1);
-    else
-      fault = ((used_scale - true_scale) > 1);
+    // Calculate fault based on scale difference
+    // For reverse checking, we need to adjust the comparison
+    if (reverse_mode) begin
+      // In reverse mode, compare the scales more carefully
+      // The error bounds are different for reverse checking
+      if (full_nbits_abs(A) <= full_nbits_abs(B)) begin
+        // Compare reverse result with truncated B
+        expected_scale_reg = get_scale(trunc_nbits_abs(trunc_B), TRUNC_NBITS, FULL_NBITS);
+        if (used_scale > expected_scale_reg)
+          fault = ((used_scale - expected_scale_reg) > 2); // Relaxed threshold for reverse checking
+        else
+          fault = ((expected_scale_reg - used_scale) > 2);
+      end
+      else begin
+        // Compare reverse result with truncated A
+        expected_scale_reg = get_scale(trunc_nbits_abs(trunc_A), TRUNC_NBITS, FULL_NBITS);
+        if (used_scale > expected_scale_reg)
+          fault = ((used_scale - expected_scale_reg) > 2);
+        else
+          fault = ((expected_scale_reg - used_scale) > 2);
+      end
+    end
+    else begin
+      // Normal forward checking
+      if (true_scale > used_scale)
+        fault = ((true_scale - used_scale) > 1);
+      else
+        fault = ((used_scale - true_scale) > 1);
+    end
   end
 
 endmodule
