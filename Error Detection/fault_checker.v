@@ -151,7 +151,7 @@ module fault_checker #(
         posit_trunc_check = 1;
       else begin
         frac_indexA = get_frac_index(PA, current_nbits, es, frac_size);
-        frac_indexB = get_frac_index(PB, current_nbits, es, frac_size);
+        frac_indexB = get_frac_index(PB, current_nbits, es, frac_size); //if frac index greater than length of truncated value
         if ((frac_indexA > (TRUNC_NBITS-1)) || (frac_indexA == -1) ||
             (frac_indexB > (TRUNC_NBITS-1)) || (frac_indexB == -1))
           posit_trunc_check = 0;
@@ -202,7 +202,8 @@ module fault_checker #(
     if (posit_trunc_check(full_nbits_abs(A), full_nbits_abs(B), FULL_NBITS, ES, FRAC_SIZE)) begin
       mode     = 1;
       used_sum = { {(FULL_NBITS-TRUNC_NBITS){1'b0}}, adder_trunc_out };
-    end else begin
+    end 
+    else begin
       mode     = 0;
       used_sum = adder_punt_out;
     end
