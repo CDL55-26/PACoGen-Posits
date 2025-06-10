@@ -316,18 +316,18 @@ module fault_checker #(
     // For reverse checking, we need to adjust the comparison
     if (reverse_mode) begin
       // In reverse mode, compare the scales more carefully
-      // The error bounds are different for reverse checking
+      // Compare reconstructed operand with full-precision original (consistent with forward checking)
       if (full_nbits_abs(A) <= full_nbits_abs(B)) begin
-        // Compare reverse result with truncated B
-        expected_scale_reg = get_scale(trunc_nbits_abs(trunc_B), TRUNC_NBITS, FULL_NBITS);
+        // We reconstructed A, compare reverse result with full-precision A
+        expected_scale_reg = get_scale(full_nbits_abs(A), FULL_NBITS, FULL_NBITS);
         if (used_scale > expected_scale_reg)
           fault = ((used_scale - expected_scale_reg) > 2); // Relaxed threshold for reverse checking
         else
           fault = ((expected_scale_reg - used_scale) > 2);
       end
       else begin
-        // Compare reverse result with truncated A
-        expected_scale_reg = get_scale(trunc_nbits_abs(trunc_A), TRUNC_NBITS, FULL_NBITS);
+        // We reconstructed B, compare reverse result with full-precision B
+        expected_scale_reg = get_scale(full_nbits_abs(B), FULL_NBITS, FULL_NBITS);
         if (used_scale > expected_scale_reg)
           fault = ((used_scale - expected_scale_reg) > 2);
         else
